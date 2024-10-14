@@ -61,6 +61,7 @@ def build_pretraining_data_loader(dataset, consumed_samples, use_all_samples=Fal
     return torch.utils.data.DataLoader(dataset,
                                        batch_sampler=batch_sampler,
                                        num_workers=args.num_workers,
+                                       prefetch_factor=args.num_workers,
                                        pin_memory=True,)
 
 class MegatronPretrainingSampler:

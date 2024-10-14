@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH -p luna -A mlperf -t 00:20:00 --nodes=8 --exclusive --mem=0 --overcommit --ntasks-per-node=8 --job-name=mlperf-megatron:megatron
+#SBATCH -A mlperf -t 23:59:59 --nodelist=worker-[0-7] --ntasks-per-node=8 --gpus=64 --cpus-per-task=10 --mem-per-cpu=14GB --job-name=mlperf-megatron
 
 # Vars without defaults
 LOG_DIR=${1:?LOG_DIR not set}
@@ -26,6 +26,28 @@ mkdir -p ${LOG_DIR}
 mkdir -p ${CHECKPOINT_DIR}
 mkdir -p ${TENSORBOARD_DIR}
 
+export NCCL_TOPO_FILE=/var/run/nvidia-topologyd/virtualTopology.xml
+export COM_DIR=/gpt3/dataset/preprocessed_c4_spm
+export USE_BF16=true
+export WORLD_SIZE=64
+export EXTERNAL_MODEL_CHECKPOINT_DIR=/gpt3/checkpoint/bf16/ckpt4000
+export MASTER_ADDR="10.0.2.216"
+export MASTER_PORT=7000
+export TORCH_CUDA_ARCH_LIST="9.0"
+export NCCL_SOCKET_IFNAME="eth0"
+
+#export NCCL_TIMEOUT=540
+#export NCCL_LAUNCH_MODE=PARALLEL
+#export NCCL_ASYNC_ERROR_HANDLING=1
+
+#export NCCL_DEBUG=INFO
+#export NCCL_DEBUG_SUBSYS=ALL
+#export TORCH_DISTRIBUTED_DEBUG=INFO
+
+#export NCCL_IBEXT_DISABLE=1
+#export NCCL_IB_DISABLE=1
+#export NCCL_P2P_DISABLE=1
+
 # Get the data blend
 . $PWD/gpt3_blend.sh
 
@@ -44,6 +66,7 @@ echo "setting exit duration to $EXIT_DURATION minutes"
 ################################################################################
 
 options=" \
+--num-workers 16 \
 --exit-duration-in-mins ${EXIT_DURATION} \
 --tensor-model-parallel-size 8 \
 --pipeline-model-parallel-size 8 \
@@ -95,6 +118,7 @@ options=" \
 if [ -n "${EXTERNAL_MODEL_CHECKPOINT_DIR}" ]; then
   options+=" \
 		--no-load-rng \
+		--no-load-optim \
 		--use-ext-ckpt \
 		--ext-iterations $(( $EXTERNAL_TRAINING_ITERATIONS * $EXTERNAL_GBS / $GBS)) \
 		--ext-lr-steps $(( $EXTERNAL_TRAINING_ITERATIONS * $EXTERNAL_GBS)) \
@@ -103,14 +127,24 @@ else
   options+=" --load ${CHECKPOINT_DIR}"
 fi
 
+echo "Job runs on the following nodes: ${SLURM_JOB_NODELIST}"
+
+echo "PyTorch options: ${options}"
+
 # Run
+debug_cmd='echo "START training step NODE_ID:" $SLURM_NODEID "NODE_NAME:" $SLURMD_NODENAME "JOB_ID:" $SLURM_JOBID "RANK:" $SLURM_PROCID "TASK_ID:" $SLURM_LOCALID "PID:" $SLURM_TASK_PID "GPUs:" $CUDA_VISIBLE_DEVICES'
 run_cmd="python -u ${MEGATRON_DIR}/pretrain_gpt.py ${options}"
+
 DATETIME=`date +'date_%y-%m-%d_time_%H-%M-%S'`
 
 srun -l \
      --container-image $CONT \
-     --container-mounts "$PWD:$PWD,${COM_DIR}:${COM_DIR},${LOG_DIR}:${LOG_DIR},${BPE_DIR}:${BPE_DIR}" \
-     --output=$LOG_DIR/GPT3-175B-runlog-$DATETIME.log sh -c "${run_cmd}"
+     --container-mounts "$NCCL_TOPO_FILE:$NCCL_TOPO_FILE,$PWD:$PWD,${COM_DIR}:${COM_DIR},${LOG_DIR}:${LOG_DIR},${BPE_DIR}:${BPE_DIR},${EXTERNAL_MODEL_CHECKPOINT_DIR}:${EXTERNAL_MODEL_CHECKPOINT_DIR}" \
+     --container-writable \
+     --container-name="mlperf_megatron" \
+     --export=ALL \
+     --output=$LOG_DIR/megatron-%j.log sh -c "${debug_cmd} && ${run_cmd}"
+#     --output=$LOG_DIR/megatron-%j-%N.log sh -c "${debug_cmd} && ${run_cmd}"
 
 set +x
 

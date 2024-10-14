@@ -188,7 +188,9 @@ def _initialize_distributed():
     torch.distributed.init_process_group(
         backend=args.distributed_backend,
         world_size=args.world_size, rank=args.rank,
-        timeout=timedelta(minutes=10))
+        timeout=timedelta(minutes=30))
+
+    print('torch.distributed.init_process_group: done')
 
     # Set the tensor model-parallel, pipeline model-parallel, and
     # data-parallel communicators.

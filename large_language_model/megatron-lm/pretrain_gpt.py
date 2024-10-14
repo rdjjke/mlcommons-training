@@ -16,6 +16,7 @@
 """Pretrain GPT"""
 
 import torch
+import os
 from functools import partial
 from megatron import get_args
 from megatron import print_rank_0
@@ -138,7 +139,6 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
 
 if __name__ == "__main__":
-
     pretrain(train_valid_test_datasets_provider, model_provider,
              ModelType.encoder_or_decoder,
              forward_step, args_defaults={'tokenizer_type': 'GPT2BPETokenizer'})

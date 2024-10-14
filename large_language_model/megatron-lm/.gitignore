@@ -1,0 +1,4 @@
+key.json
+slurm-*.out
+megatron/fused_kernels/build/
+megatron/data/helpers.cpython-310-x86_64-linux-gnu.so

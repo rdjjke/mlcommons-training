@@ -43,6 +43,7 @@ def get_one_epoch_dataloader(dataset, micro_batch_size=None):
     return torch.utils.data.DataLoader(dataset,
                                        batch_sampler=batch_sampler,
                                        num_workers=num_workers,
+                                       prefetch_factor=num_workers,
                                        pin_memory=True)
 
 
